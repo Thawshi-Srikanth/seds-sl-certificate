@@ -1,4 +1,5 @@
 import React from 'react';
+import { getOrgUrl, getOrgDomain } from '../lib/crypto';
 
 export const Footer: React.FC = () => {
   return (
@@ -6,18 +7,19 @@ export const Footer: React.FC = () => {
       <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-3 px-4 sm:flex-row sm:px-6">
         <div>© {new Date().getFullYear()} SEDS Sri Lanka. All rights reserved.</div>
         <div className="flex items-center gap-4 text-zinc-500">
-          <span>End-to-End Cryptographic Verification</span>
+          <span>Cryptographic Verification</span>
           <span>•</span>
           <a
-            href="https://seds.lk"
+            href={getOrgUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:text-zinc-300"
+            className="transition-colors hover:text-zinc-300 font-medium text-zinc-400"
           >
-            seds.lk
+            {getOrgDomain()}
           </a>
         </div>
       </div>
     </footer>
   );
 };
+

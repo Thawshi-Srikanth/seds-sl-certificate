@@ -31,7 +31,7 @@ export const App: React.FC = () => {
 
   return (
     <BrowserRouter>
-      <div className="flex min-h-screen flex-col bg-black text-zinc-100 antialiased selection:bg-white selection:text-black">
+      <div className="flex min-h-screen flex-col bg-[#09090b] text-[#DFDFDE] antialiased selection:bg-[#3B82F6] selection:text-white">
         {/* Sonner Toast Notifications */}
         <Toaster
           theme="dark"
@@ -40,10 +40,10 @@ export const App: React.FC = () => {
           closeButton
           toastOptions={{
             style: {
-              background: '#18181b',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: '#fafafa',
-              borderRadius: '14px',
+              background: '#09090b',
+              border: '1px solid #27272a',
+              color: '#DFDFDE',
+              borderRadius: '0px',
             },
           }}
         />

@@ -21,6 +21,7 @@ export const CertificatePortal: React.FC = () => {
   const [email, setEmail] = useState<string>('');
   const [certificateCode, setCertificateCode] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [downloading, setDownloading] = useState<boolean>(false);
 
   // Result State
   const [result, setResult] = useState<VerificationResponse | null>(null);
@@ -113,6 +114,46 @@ export const CertificatePortal: React.FC = () => {
     toast.info('Ready to verify another certificate.');
   };
 
+  const handleDirectDownload = async () => {
+    if (!result?.download_url) return;
+    setDownloading(true);
+    try {
+      const response = await fetch(result.download_url);
+      if (!response.ok) throw new Error('Failed to fetch certificate file');
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      // Clean filename format: SEDS-[EVENT]-Certificate-[NAME].pdf
+      const cleanName = (result.participant_name || 'Participant')
+        .replace(/[^a-zA-Z0-9]/g, '-')
+        .replace(/-+/g, '-');
+      const cleanEvent = (eventSlug || 'SEDS').toUpperCase();
+      const filename = `SEDS-${cleanEvent}-Certificate-${cleanName}.pdf`;
+
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+
+      toast.success(`Certificate downloaded: ${filename}`);
+    } catch (err) {
+      console.warn('Direct blob download fallback:', err);
+      // Fallback in case of storage CORS policy
+      const a = document.createElement('a');
+      a.href = result.download_url;
+      a.download = `SEDS-Certificate-${result.participant_name || 'Participant'}.pdf`;
+      a.target = '_self';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (loadingEvent) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -155,13 +196,14 @@ export const CertificatePortal: React.FC = () => {
       </div>
 
       {/* Main Card */}
-      <div className="apple-card space-y-6 rounded-2xl p-6 sm:p-8">
+      <div className="bleed-cross bg-[#09090b] space-y-6 p-6 sm:p-8">
+
         {/* Header */}
         <div className="space-y-1.5 text-center sm:text-left">
-          <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-[#3B82F6]">
             SEDS Certificate Verification
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+          <h1 className="text-xl font-bold tracking-tight text-[#DFDFDE] sm:text-2xl">
             {event.name}
           </h1>
           {event.description && <p className="mt-1 text-xs text-zinc-400">{event.description}</p>}
@@ -170,17 +212,17 @@ export const CertificatePortal: React.FC = () => {
         {/* Success View */}
         {result?.success ? (
           <div className="space-y-5 pt-2">
-            <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-5">
-              <div className="flex items-center gap-2 text-emerald-400">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span className="text-xs font-semibold uppercase tracking-wider">
-                  Certificate Verified
+            <div className="space-y-3 border border-zinc-800 bg-zinc-950/80 p-5 shadow-inner">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm uppercase tracking-wide">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Certificate Verified</span>
                 </span>
               </div>
 
-              <div className="space-y-0.5">
-                <div className="text-xs text-zinc-400">Participant Name</div>
-                <div className="text-lg font-semibold text-white">{result.participant_name}</div>
+              <div className="space-y-0.5 pt-1">
+                <div className="text-xs text-zinc-400 uppercase tracking-wider">Participant Name</div>
+                <div className="text-lg font-bold text-white tracking-wide">{result.participant_name}</div>
                 {result.registration_id && (
                   <div className="font-mono text-xs text-zinc-400">
                     Registration ID: {result.registration_id}
@@ -190,34 +232,42 @@ export const CertificatePortal: React.FC = () => {
 
               <p className="pt-1 text-xs text-zinc-300">
                 Your certificate has been verified for{' '}
-                <strong>{result.event_name || event.name}</strong>.
+                <strong className="text-white">{result.event_name || event.name}</strong>.
               </p>
             </div>
 
             {/* Actions */}
             <div className="space-y-2.5 pt-2">
-              <a
-                href={result.download_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition-all hover:bg-zinc-200 active:scale-[0.99]"
+              <button
+                type="button"
+                onClick={handleDirectDownload}
+                disabled={downloading}
+                className="btn-primary-sharp inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold tracking-wider transition-all disabled:opacity-75"
               >
-                <Download className="h-4 w-4" />
-                <span>Download Certificate</span>
-              </a>
+                {downloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
+                    <span>Saving Certificate...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    <span>Download Certificate</span>
+                  </>
+                )}
+              </button>
 
               <button
                 type="button"
                 onClick={handleReset}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-700 hover:text-white"
+                className="btn-secondary-sharp inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium uppercase tracking-wider"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>Verify another certificate</span>
               </button>
             </div>
 
-            <div className="text-center text-[11px] text-zinc-500">
+            <div className="text-center text-[11px] text-zinc-500 font-mono">
               Download link is valid for 5 minutes.
             </div>
           </div>
@@ -228,7 +278,7 @@ export const CertificatePortal: React.FC = () => {
             {errorMessage && (
               <div
                 role="alert"
-                className="flex items-center gap-2.5 rounded-xl border border-rose-500/20 bg-rose-950/20 p-3.5 text-xs text-rose-300"
+                className="flex items-center gap-2.5 border border-rose-600/30 bg-rose-950/30 p-3.5 text-xs font-medium text-rose-200"
               >
                 <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
                 <span>{errorMessage}</span>
@@ -239,7 +289,7 @@ export const CertificatePortal: React.FC = () => {
             <div>
               <label
                 htmlFor="participant-email"
-                className="mb-1.5 block text-xs font-medium text-zinc-300"
+                className="mb-1.5 block text-xs font-medium text-zinc-300 uppercase tracking-wider"
               >
                 Registered Email
               </label>
@@ -252,7 +302,7 @@ export const CertificatePortal: React.FC = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
                 disabled={submitting}
-                className="apple-input w-full rounded-xl px-3.5 py-2.5 text-sm placeholder-zinc-600 disabled:opacity-50"
+                className="apple-input w-full px-3.5 py-2.5 text-sm placeholder-zinc-600 disabled:opacity-50"
               />
             </div>
 
@@ -260,7 +310,7 @@ export const CertificatePortal: React.FC = () => {
             <div>
               <label
                 htmlFor="certificate-code"
-                className="mb-1.5 block text-xs font-medium text-zinc-300"
+                className="mb-1.5 block text-xs font-medium text-zinc-300 uppercase tracking-wider"
               >
                 Certificate Code
               </label>
@@ -275,7 +325,7 @@ export const CertificatePortal: React.FC = () => {
                 onChange={(e) => setCertificateCode(e.target.value.toUpperCase())}
                 placeholder="Code shared during event"
                 disabled={submitting}
-                className="apple-input w-full rounded-xl px-3.5 py-2.5 font-mono text-sm uppercase tracking-wide placeholder-zinc-600 disabled:opacity-50"
+                className="apple-input w-full px-3.5 py-2.5 font-mono text-sm uppercase tracking-wide placeholder-zinc-600 disabled:opacity-50"
               />
             </div>
 
@@ -284,11 +334,11 @@ export const CertificatePortal: React.FC = () => {
               <button
                 type="submit"
                 disabled={submitting}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition-all hover:bg-zinc-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-primary-sharp inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold tracking-wider transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin text-black" />
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
                     <span>Verifying...</span>
                   </>
                 ) : (
@@ -301,7 +351,8 @@ export const CertificatePortal: React.FC = () => {
       </div>
 
       {/* Subtle test hints */}
-      <div className="mt-6 text-center text-xs text-zinc-500">
+      <div className="mt-6 text-center text-xs text-zinc-500 font-mono">
+        SEDS Sri Lanka Certificate Distribution System
         SEDS Sri Lanka Certificate Distribution System
       </div>
     </div>

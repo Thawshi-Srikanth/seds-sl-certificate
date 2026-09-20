@@ -6,15 +6,19 @@ export const Navbar: React.FC = () => {
   const isAdmin = location.pathname.startsWith('/admin');
 
   return (
-    <header className="relative z-20 border-b border-zinc-800/80 bg-black/60 backdrop-blur-xl">
+    <header className="relative z-20 border-b border-zinc-800 bg-[#09090b]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
         {/* Brand */}
-        <Link to="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-700/60 bg-zinc-800 text-xs font-bold text-white">
-            S
+        <Link to="/" className="flex items-center gap-3 transition-opacity hover:opacity-90">
+          <img
+            src="/sedsl-l-icon.png"
+            alt="SEDS Sri Lanka"
+            className="h-8 w-8 object-contain bg-zinc-900 border border-zinc-700 p-0.5"
+          />
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-sm font-bold tracking-wider text-[#DFDFDE] uppercase">SEDS Sri Lanka</span>
+            <span className="text-xs font-mono text-[#3B82F6]">/ VERIFY</span>
           </div>
-          <span className="text-sm font-semibold tracking-tight text-white">SEDS Sri Lanka</span>
-          <span className="text-xs font-normal text-zinc-500">/ Certificates</span>
         </Link>
 
         {/* Action */}
@@ -22,17 +26,17 @@ export const Navbar: React.FC = () => {
           {isAdmin ? (
             <Link
               to="/"
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:text-white"
+              className="btn-secondary-sharp px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors"
             >
               Public Portal
             </Link>
           ) : (
-            <Link
-              to="/admin"
-              className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-zinc-700 hover:text-white"
+            <a
+              href="mailto:info@sedsl.org"
+              className="btn-secondary-sharp px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors hover:text-white flex items-center gap-1.5"
             >
-              Admin
-            </Link>
+              Support
+            </a>
           )}
         </div>
       </div>

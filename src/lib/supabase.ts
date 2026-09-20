@@ -173,13 +173,26 @@ export async function getAllPublicEvents(): Promise<Event[]> {
 export async function getPublicEvent(slug: string): Promise<Event | null> {
   const normalizedSlug = slug.toLowerCase().trim();
   if (supabase && isSupabaseConfigured) {
-    const { data, error } = await supabase
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      normalizedSlug
+    );
+    let query = supabase
       .from('events')
-      .select('id, name, slug, description, certificate_enabled, code_expires_at, created_at')
-      .or(`slug.eq.${normalizedSlug},id.eq.${normalizedSlug}`)
-      .maybeSingle();
+      .select('id, name, slug, description, certificate_enabled, code_expires_at, created_at');
 
-    if (error || !data) return null;
+    if (isUuid) {
+      query = query.or(`slug.eq.${normalizedSlug},id.eq.${normalizedSlug}`);
+    } else {
+      query = query.eq('slug', normalizedSlug);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      console.error('getPublicEvent query error:', error);
+      return null;
+    }
+    if (!data) return null;
     return {
       ...data,
       certificate_code_hash: '',
@@ -197,6 +210,7 @@ export async function getPublicEvent(slug: string): Promise<Event | null> {
     ) || null
   );
 }
+
 
 export async function verifyCertificate(
   eventSlug: string,

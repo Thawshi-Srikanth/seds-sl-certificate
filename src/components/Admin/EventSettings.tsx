@@ -1,20 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Check,
   Loader2,
   AlertCircle,
-  Sparkles,
   Copy,
   Clock,
   Plus,
   X,
   Hourglass,
   Calendar,
+  ExternalLink,
+  Zap,
+  Timer,
+  RefreshCw,
+  Globe,
+  Key,
+  Sliders,
+  CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Event } from '../../types';
 import { updateEventSettings, createEvent } from '../../lib/supabase';
-import { sha256Hex } from '../../lib/crypto';
+import {
+  sha256Hex,
+  calculateSLSTTarget,
+  formatDualTimezone,
+  isoToSLSTInputValue,
+  slstInputValueToIso,
+  dateToSLSTInputValue,
+  getEventPortalUrl,
+  getAppBaseDomain,
+} from '../../lib/crypto';
 
 interface EventSettingsProps {
   event: Event | null;
@@ -29,7 +44,7 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
   const [codeHashPreview, setCodeHashPreview] = useState('');
   const [enabled, setEnabled] = useState(event?.certificate_enabled ?? true);
   const [expiresAt, setExpiresAt] = useState(
-    event?.code_expires_at ? new Date(event.code_expires_at).toISOString().slice(0, 16) : ''
+    isoToSLSTInputValue(event?.code_expires_at)
   );
 
   const [saving, setSaving] = useState(false);
@@ -50,9 +65,7 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
       setSlug(event.slug);
       setDescription(event.description || '');
       setEnabled(event.certificate_enabled);
-      setExpiresAt(
-        event.code_expires_at ? new Date(event.code_expires_at).toISOString().slice(0, 16) : ''
-      );
+      setExpiresAt(isoToSLSTInputValue(event.code_expires_at));
     }
   }, [event]);
 
@@ -68,14 +81,39 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
     computeHash();
   }, [newCode]);
 
-  // Generate random code helper
-  const handleGenerateRandomCode = () => {
-    const prefix = (slug || 'SEDS').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4) || 'SEDS';
-    const year = '26';
-    const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const code = `${prefix}${year}-${randomSuffix}`;
-    setNewCode(code);
-    toast.success(`Generated new code: ${code}`);
+  // Code Generator Styles
+  const generateCodeWithStyle = (style: 'seds' | 'event' | 'pin' | 'word') => {
+    let generated = '';
+    const cleanSlug =
+      (slug || 'EVENT').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4) || 'SEDS';
+    const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    if (style === 'seds') {
+      generated = `SEDS26-${randomHex}`;
+    } else if (style === 'event') {
+      generated = `${cleanSlug}26-${randomHex}`;
+    } else if (style === 'pin') {
+      generated = Math.floor(100000 + Math.random() * 900000).toString();
+    } else if (style === 'word') {
+      const words = [
+        'LUNAR',
+        'COSMOS',
+        'ORBIT',
+        'APOLLO',
+        'STELLAR',
+        'NEBULA',
+        'GALAXY',
+        'ASTRO',
+        'HORIZON',
+        'ECLIPSE',
+      ];
+      const pick = words[Math.floor(Math.random() * words.length)];
+      const num = Math.floor(100 + Math.random() * 900);
+      generated = `${pick}-${num}`;
+    }
+
+    setNewCode(generated);
+    toast.success(`Generated code: ${generated}`);
   };
 
   // Copy code to clipboard
@@ -85,7 +123,15 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
     toast.success('Certificate code copied to clipboard!');
   };
 
-  // Expiration presets
+  // Copy portal link with configured base domain
+  const handleCopyPortalLink = () => {
+    const url = getEventPortalUrl(slug);
+    navigator.clipboard.writeText(url);
+    toast.success(`Portal URL copied: ${url}`);
+  };
+
+
+  // Expiration presets (from Now in Sri Lanka Time)
   const handleSetPresetExpiration = (minutesToAdd: number | null) => {
     if (minutesToAdd === null) {
       setExpiresAt('');
@@ -94,28 +140,46 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
     }
 
     const futureDate = new Date(Date.now() + minutesToAdd * 60 * 1000);
-    // Format to YYYY-MM-DDTHH:mm in local time
-    const tzOffset = futureDate.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(futureDate.getTime() - tzOffset).toISOString().slice(0, 16);
-    setExpiresAt(localISOTime);
+    setExpiresAt(dateToSLSTInputValue(futureDate));
 
-    let label = `${minutesToAdd} minutes`;
+    let label = `${minutesToAdd} mins`;
     if (minutesToAdd >= 1440) {
-      label = `${Math.round(minutesToAdd / 1440)} day(s)`;
+      const days = Math.round(minutesToAdd / 1440);
+      label = `${days} day${days === 1 ? '' : 's'}`;
     } else if (minutesToAdd >= 60) {
-      label = `${Math.round(minutesToAdd / 60)} hour(s)`;
+      const hrs = Math.round(minutesToAdd / 60);
+      label = `${hrs} hour${hrs === 1 ? '' : 's'}`;
     }
     toast.success(`Expiration set to ${label} from now.`);
   };
 
-  // Add 10 mins grace extension
-  const handleExtendGracePeriod = () => {
-    const baseTime = expiresAt ? new Date(expiresAt).getTime() : Date.now();
-    const extended = new Date(Math.max(Date.now(), baseTime) + 10 * 60 * 1000);
-    const tzOffset = extended.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(extended.getTime() - tzOffset).toISOString().slice(0, 16);
-    setExpiresAt(localISOTime);
-    toast.success('Extended expiration by +10 minutes!');
+  // Specific Time Target presets anchored to Sri Lanka Standard Time (UTC+05:30)
+  const handleSetTargetTime = (target: 'midnight' | 'noon' | 'end_of_week') => {
+    const futureUtc = calculateSLSTTarget(target);
+    setExpiresAt(dateToSLSTInputValue(futureUtc));
+
+    if (target === 'midnight') {
+      toast.success('Expiration set to tonight at 11:59 PM (Sri Lanka Time / +05:30).');
+    } else if (target === 'noon') {
+      toast.success('Expiration set to tomorrow at 12:00 PM (Sri Lanka Time / +05:30).');
+    } else if (target === 'end_of_week') {
+      toast.success('Expiration set to this Sunday at 11:59 PM (Sri Lanka Time / +05:30).');
+    }
+  };
+
+  // Live Grace Period Extension
+  const handleExtendGracePeriod = (minutes: number) => {
+    const currentIso = slstInputValueToIso(expiresAt);
+    const baseTime = currentIso ? new Date(currentIso).getTime() : Date.now();
+    const effectiveBase = Math.max(Date.now(), baseTime);
+    const extended = new Date(effectiveBase + minutes * 60 * 1000);
+    setExpiresAt(dateToSLSTInputValue(extended));
+
+    let label = `${minutes} mins`;
+    if (minutes >= 60) {
+      label = `${minutes / 60} hour(s)`;
+    }
+    toast.success(`Extended expiration by +${label}!`);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -127,19 +191,20 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
     setSaveError(null);
 
     try {
+      const dbExpiresAt = slstInputValueToIso(expiresAt);
       const success = await updateEventSettings(event.id, {
         name: name.trim(),
         slug: slug.trim(),
         description: description.trim() || null,
         certificate_enabled: enabled,
-        code_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+        code_expires_at: dbExpiresAt,
         certificate_code: newCode.trim() || undefined,
       });
 
       if (success) {
         setSaveSuccess(true);
         setNewCode('');
-        toast.success('Event configuration updated successfully');
+        toast.success('Event settings updated successfully');
         onEventUpdated();
         setTimeout(() => setSaveSuccess(false), 3000);
       } else {
@@ -193,125 +258,218 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
     }
   };
 
-  // Compute readable expiration status
-  const getExpirationStatusText = () => {
-    if (!expiresAt) return 'No expiration set (Never expires)';
-    const expDate = new Date(expiresAt);
+  // Compute readable expiration status with dual timezone support
+  const getExpirationStatus = () => {
+    if (!expiresAt) {
+      return {
+        label: 'Never Expires (Unlimited)',
+        detail: 'Open indefinitely until disabled',
+        timezones: null,
+        state: 'open' as const,
+      };
+    }
+    const isoUtc = slstInputValueToIso(expiresAt);
+    if (!isoUtc) {
+      return {
+        label: 'Invalid Date',
+        detail: 'Please select a valid date and time',
+        timezones: null,
+        state: 'expired' as const,
+      };
+    }
+
+    const expDate = new Date(isoUtc);
     const now = new Date();
     const diffMs = expDate.getTime() - now.getTime();
+    const tzInfo = formatDualTimezone(expDate);
 
-    if (diffMs <= 0) return 'Code Expired';
+    if (diffMs <= 0) {
+      return {
+        label: 'Code Expired',
+        detail: `Expired at ${tzInfo.slst}`,
+        timezones: tzInfo,
+        state: 'expired' as const,
+      };
+    }
 
     const diffMins = Math.round(diffMs / 60000);
-    if (diffMins < 60) return `Expires in ${diffMins} min${diffMins === 1 ? '' : 's'}`;
-    const diffHours = Math.floor(diffMins / 60);
-    const remainMins = diffMins % 60;
-    if (diffHours < 24) return `Expires in ${diffHours}h ${remainMins}m`;
-    const diffDays = Math.round(diffMins / 1440);
-    return `Expires in ~${diffDays} day${diffDays === 1 ? '' : 's'}`;
+    let timeText = '';
+    if (diffMins < 60) {
+      timeText = `${diffMins} min${diffMins === 1 ? '' : 's'}`;
+    } else if (diffMins < 1440) {
+      const diffHours = Math.floor(diffMins / 60);
+      const remainMins = diffMins % 60;
+      timeText = `${diffHours}h ${remainMins}m`;
+    } else {
+      const diffDays = Math.round(diffMins / 1440);
+      timeText = `~${diffDays} day${diffDays === 1 ? '' : 's'}`;
+    }
+
+    return {
+      label: `Active · Expires in ${timeText}`,
+      detail: `Valid until ${tzInfo.slst}`,
+      timezones: tzInfo,
+      state: 'active' as const,
+    };
   };
 
+  const expStatus = getExpirationStatus();
+
+
   return (
-    <div className="apple-card space-y-6 rounded-2xl p-6 sm:p-8">
-      {/* Header */}
-      <div className="flex flex-col items-start justify-between gap-3 border-b border-zinc-800 pb-5 sm:flex-row sm:items-center">
+    <div className="space-y-6">
+      {/* Top Controls Header */}
+      <div className="apple-card flex flex-col items-start justify-between gap-3 rounded-2xl p-5 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-lg font-semibold text-white">Event Configuration</h2>
+          <h2 className="text-base font-semibold text-white">Event Settings & Controls</h2>
           <p className="text-xs text-zinc-400">
-            Configure parameters, automated livestream codes, and validity windows
+            Isolated configuration modules for event identity, secret codes, and expiration timer
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowNewEventModal(true)}
-          className="rounded-xl border border-zinc-700 bg-zinc-800 px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-700 flex items-center gap-1.5"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>New Event</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyPortalLink}
+            className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white flex items-center gap-1.5"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            <span>Copy Link</span>
+          </button>
+
+          <a
+            href={`/${slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary-sharp px-3 py-1.5 text-xs uppercase tracking-wider flex items-center gap-1.5"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-[#3B82F6]" />
+            <span>Open Portal</span>
+          </a>
+
+          <button
+            type="button"
+            onClick={() => setShowNewEventModal(true)}
+            className="btn-primary-sharp px-3 py-1.5 text-xs uppercase tracking-wider flex items-center gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>New Event</span>
+          </button>
+        </div>
       </div>
 
       {saveSuccess && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-3 text-xs text-emerald-300">
-          <Check className="h-4 w-4 shrink-0 text-emerald-400" />
-          <span>Event settings saved.</span>
+        <div className="flex items-center gap-2 bg-emerald-600 p-3 text-xs font-semibold text-white shadow-sm uppercase tracking-wide">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-white" />
+          <span>All settings saved and published successfully.</span>
         </div>
       )}
 
       {saveError && (
-        <div className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-950/20 p-3 text-xs text-rose-300">
+        <div className="flex items-center gap-2 border border-rose-600/30 bg-rose-950/30 p-3 text-xs font-semibold text-rose-200">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{saveError}</span>
         </div>
       )}
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Name & Slug */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
-              Event Name
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="apple-input w-full rounded-xl px-3.5 py-2.5 text-sm"
-            />
+        {/* MODULE 1: Event Identity & URL Routing */}
+        <div className="bleed-cross bg-[#09090b] space-y-4 p-6">
+          <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+            <Globe className="h-4 w-4 text-[#3B82F6]" />
+            <h3 className="text-sm font-bold text-[#DFDFDE] uppercase tracking-wide">1. Event Identity & Public URL</h3>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
-              URL Slug (e.g. /imot)
-            </label>
-            <input
-              type="text"
-              required
-              value={slug}
-              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-              className="apple-input w-full rounded-xl px-3.5 py-2.5 font-mono text-sm text-zinc-200"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-zinc-300">
-            Description (Optional)
-          </label>
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Official certificate distribution for attendees."
-            className="apple-input w-full rounded-xl px-3.5 py-2.5 text-sm"
-          />
-        </div>
-
-        {/* Certificate Code Section with 1-Click Auto-Generator */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <h3 className="text-sm font-medium text-white">Livestream Certificate Code</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                The secret code participants must enter. Stored as a one-way SHA-256 hash.
-              </p>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-300">Event Name</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="apple-input w-full px-3.5 py-2.5 text-sm"
+              />
             </div>
 
-            <button
-              type="button"
-              onClick={handleGenerateRandomCode}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition-all active:scale-95"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-zinc-400" />
-              <span>Auto-Generate Code</span>
-            </button>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-300">
+                URL Slug Path
+              </label>
+              <div className="flex overflow-hidden border border-zinc-800 focus-within:border-zinc-500 focus-within:ring-1 focus-within:ring-zinc-500 bg-zinc-950/60">
+                <span className="flex items-center bg-zinc-900/90 px-3 py-2.5 font-mono text-xs text-zinc-500 border-r border-zinc-800 select-none">
+                  {getAppBaseDomain()}/
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                  className="w-full bg-transparent px-3 py-2.5 font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
+              Description (Optional)
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Official certificate distribution for attendees."
+              className="apple-input w-full px-3.5 py-2.5 text-sm"
+            />
+          </div>
+        </div>
+
+        {/* MODULE 2: Livestream Secret Code */}
+        <div className="bleed-cross bg-[#09090b] space-y-4 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Key className="h-4 w-4 text-[#3B82F6]" />
+              <h3 className="text-sm font-bold text-[#DFDFDE] uppercase tracking-wide">2. Livestream Verification Code</h3>
+            </div>
+
+            {/* Generator Quick Action Chips */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => generateCodeWithStyle('seds')}
+                className="btn-secondary-sharp inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider transition-all"
+              >
+                <span>SEDS26-XXXX</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => generateCodeWithStyle('event')}
+                className="btn-secondary-sharp inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider transition-all"
+              >
+                <span>{slug ? slug.toUpperCase().slice(0, 4) : 'EVNT'}26-XXXX</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => generateCodeWithStyle('pin')}
+                className="btn-secondary-sharp inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider transition-all"
+              >
+                <span>6-Digit PIN</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => generateCodeWithStyle('word')}
+                className="btn-secondary-sharp inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider transition-all"
+              >
+                <Zap className="h-3 w-3 text-[#3B82F6]" />
+                <span>Word-Code</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs text-zinc-400">
+              <label className="mb-1 block text-xs font-medium text-zinc-300 uppercase tracking-wider">
                 New Certificate Code (Leave blank to keep existing)
               </label>
               <div className="relative">
@@ -319,15 +477,15 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
                   type="text"
                   value={newCode}
                   onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. IOTM26-X7K9Q"
-                  className="apple-input w-full rounded-xl px-3.5 py-2.5 pr-10 font-mono text-sm uppercase tracking-wider"
+                  placeholder="e.g. SEDS26-X8K9Q or 849201"
+                  className="apple-input w-full px-3.5 py-2.5 pr-10 font-mono text-sm uppercase tracking-wider"
                 />
                 {newCode && (
                   <button
                     type="button"
                     onClick={handleCopyCode}
-                    title="Copy code"
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-white"
+                    title="Copy code to clipboard"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-[#3B82F6] hover:text-white"
                   >
                     <Copy className="h-4 w-4" />
                   </button>
@@ -336,10 +494,10 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-zinc-400">
-                SHA-256 Database Storage Hash
+              <label className="mb-1 block text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                SHA-256 Storage Hash (One-Way Verification)
               </label>
-              <div className="apple-input w-full truncate rounded-xl bg-zinc-950/60 px-3.5 py-2.5 font-mono text-xs text-zinc-500">
+              <div className="apple-input w-full truncate bg-zinc-950/60 px-3.5 py-2.5 font-mono text-xs text-zinc-500">
                 {codeHashPreview ||
                   (event?.certificate_code_hash
                     ? `${event.certificate_code_hash.slice(0, 24)}...`
@@ -349,136 +507,259 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
           </div>
         </div>
 
-        {/* Expiration Controller with Quick Preset Buttons */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        {/* MODULE 3: Expiration Timer Controls */}
+        <div className="bleed-cross bg-[#09090b] space-y-5 p-6">
+
+          {/* Header with Solid Status Badge & Timezone details */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
             <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-zinc-400" />
-              <h3 className="text-sm font-medium text-white">Code Validity & Expiration</h3>
+              <Clock className="h-4 w-4 text-[#3B82F6]" />
+              <div>
+                <h3 className="text-sm font-bold text-[#DFDFDE] uppercase tracking-wide">
+                  3. Validity Window & Expiration Timer
+                </h3>
+                <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                  <span className="text-[11px] text-[#3B82F6] font-mono">
+                    Timezone: Asia/Colombo (SLST · UTC+05:30)
+                  </span>
+                  {expStatus.timezones && !expStatus.timezones.isSameTimezone && (
+                    <>
+                      <span className="text-zinc-600">·</span>
+                      <span className="text-[11px] text-zinc-400">
+                        Local: {expStatus.timezones.local}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400 bg-zinc-950/60 px-2.5 py-1 rounded-lg border border-zinc-800">
-              <Hourglass className="h-3 w-3 text-zinc-400" />
-              <span>{getExpirationStatusText()}</span>
+
+            <div className="flex flex-col items-start sm:items-end">
+              {/* Solid Badges */}
+              <div
+                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 font-semibold uppercase tracking-wide shadow-sm ${
+                  expStatus.state === 'active'
+                    ? 'bg-emerald-600 text-white'
+                    : expStatus.state === 'expired'
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-zinc-700 text-zinc-100'
+                }`}
+              >
+                <Hourglass className="h-3 w-3 shrink-0" />
+                <span>{expStatus.label}</span>
+              </div>
+              <span className="text-[11px] text-zinc-400 mt-1 font-mono">{expStatus.detail}</span>
             </div>
           </div>
 
-          {/* Quick Preset Buttons */}
-          <div>
-            <label className="mb-2 block text-xs text-zinc-400 font-medium">
-              Quick Expiration Presets (1-Click Set)
+          {/* Row 1: Rapid Livestream Durations */}
+          <div className="space-y-2">
+            <label className="text-xs text-zinc-300 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              <Timer className="h-3.5 w-3.5 text-[#3B82F6]" />
+              <span>Livestream Duration (1-Click Set from Now)</span>
             </label>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               <button
                 type="button"
                 onClick={() => handleSetPresetExpiration(5)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
               >
                 +5 Min
               </button>
               <button
                 type="button"
+                onClick={() => handleSetPresetExpiration(10)}
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
+              >
+                +10 Min
+              </button>
+              <button
+                type="button"
                 onClick={() => handleSetPresetExpiration(15)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
               >
                 +15 Min
               </button>
               <button
                 type="button"
                 onClick={() => handleSetPresetExpiration(30)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
               >
                 +30 Min
               </button>
               <button
                 type="button"
                 onClick={() => handleSetPresetExpiration(60)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
               >
                 +1 Hour
               </button>
               <button
                 type="button"
+                onClick={() => handleSetPresetExpiration(180)}
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
+              >
+                +3 Hours
+              </button>
+            </div>
+          </div>
+
+          {/* Row 2: Extended Window & Target Dates */}
+          <div className="space-y-2">
+            <label className="text-xs text-zinc-300 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-[#3B82F6]" />
+              <span>Extended Window & Target Milestones</span>
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <button
+                type="button"
                 onClick={() => handleSetPresetExpiration(1440)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
               >
                 +1 Day
               </button>
               <button
                 type="button"
+                onClick={() => handleSetPresetExpiration(4320)}
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
+              >
+                +3 Days
+              </button>
+              <button
+                type="button"
                 onClick={() => handleSetPresetExpiration(10080)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
               >
                 +7 Days
               </button>
               <button
                 type="button"
-                onClick={() => handleSetPresetExpiration(null)}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                onClick={() => handleSetTargetTime('midnight')}
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider"
               >
-                Never (No Limit)
+                Tonight Midnight
               </button>
               <button
                 type="button"
-                onClick={handleExtendGracePeriod}
-                className="ml-auto rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/40 transition-colors"
+                onClick={() => handleSetPresetExpiration(null)}
+                className="btn-secondary-sharp px-3 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400"
               >
-                +10 Min Grace
+                Never (Unlimited)
               </button>
             </div>
           </div>
 
-          {/* Custom Date-Time Picker */}
-          <div className="pt-1 border-t border-zinc-800/80">
-            <label className="mb-1.5 block text-xs text-zinc-400 flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5 text-zinc-400" />
-              <span>Custom Expiration Date & Time</span>
-            </label>
+          {/* Row 3: Live Grace Extensions */}
+          <div className="border border-zinc-800 bg-zinc-950/70 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5 text-[#3B82F6]" />
+                <span>Live Grace Extension (Adds to current countdown)</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleExtendGracePeriod(5)}
+                className="btn-secondary-sharp px-3 py-1.5 text-xs font-semibold uppercase tracking-wider"
+              >
+                +5 Min Grace
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExtendGracePeriod(10)}
+                className="btn-secondary-sharp px-3 py-1.5 text-xs font-semibold uppercase tracking-wider"
+              >
+                +10 Min Grace
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExtendGracePeriod(30)}
+                className="btn-secondary-sharp px-3 py-1.5 text-xs font-semibold uppercase tracking-wider"
+              >
+                +30 Min Grace
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExtendGracePeriod(60)}
+                className="btn-secondary-sharp px-3 py-1.5 text-xs font-semibold uppercase tracking-wider"
+              >
+                +1 Hour Grace
+              </button>
+            </div>
+          </div>
+
+          {/* Row 4: Custom Date Picker */}
+          <div className="pt-2 border-t border-zinc-800">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-zinc-300 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-[#3B82F6]" />
+                <span>Custom Expiration Date & Time (Sri Lanka Time · UTC+05:30)</span>
+              </label>
+              {expiresAt && (
+                <button
+                  type="button"
+                  onClick={() => setExpiresAt('')}
+                  className="text-[11px] text-[#3B82F6] hover:text-white uppercase tracking-wider underline font-mono"
+                >
+                  Clear Date
+                </button>
+              )}
+            </div>
             <input
               type="datetime-local"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
-              className="apple-input w-full rounded-xl px-3.5 py-2 text-xs text-zinc-200"
+              className="apple-input w-full px-3.5 py-2.5 text-xs text-zinc-200 font-mono"
             />
           </div>
         </div>
 
-        {/* Claiming Toggle */}
-        <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-          <div>
-            <div className="text-xs font-medium text-white">Enable Certificate Claiming</div>
-            <div className="text-[11px] text-zinc-400">
-              When disabled, participants cannot claim certificates even with valid codes.
+        {/* MODULE 4: Master Claiming Access Toggle */}
+        <div className="bleed-cross bg-[#09090b] flex items-center justify-between p-5">
+          <div className="flex items-center gap-3">
+            <Sliders className="h-4 w-4 text-[#3B82F6] shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-[#DFDFDE] uppercase tracking-wide">4. Certificate Claiming Status</div>
+              <div className="text-xs text-zinc-400">
+                {enabled
+                  ? 'Portal is currently OPEN for eligible participants.'
+                  : 'Portal is currently CLOSED / DISABLED.'}
+              </div>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setEnabled(!enabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-              enabled ? 'bg-white' : 'bg-zinc-800'
+            className={`relative inline-flex h-6 w-12 items-center transition-colors focus:outline-none border border-zinc-700 ${
+              enabled ? 'bg-[#3B82F6]' : 'bg-zinc-900'
             }`}
           >
             <span
-              className={`inline-block h-4 w-4 transform rounded-full transition-transform ${
-                enabled ? 'translate-x-6 bg-black' : 'translate-x-1 bg-zinc-400'
+              className={`inline-block h-4 w-5 transform transition-transform ${
+                enabled ? 'translate-x-6 bg-white' : 'translate-x-1 bg-zinc-500'
               }`}
             />
           </button>
         </div>
 
-        {/* Submit */}
-        <div className="flex justify-end pt-2">
+        {/* Save Bar */}
+        <div className="sticky bottom-4 z-20 flex items-center justify-between border border-zinc-800 bg-[#09090b]/95 p-4 backdrop-blur-xl shadow-2xl">
+          <span className="text-xs text-zinc-400 font-mono">
+            Ensure to save after changing code, timer, or event details.
+          </span>
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+            className="btn-primary-sharp inline-flex items-center gap-2 px-6 py-2.5 text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-50"
           >
             {saving ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-black" />
-                <span>Saving Changes...</span>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                <span>Saving...</span>
               </>
             ) : (
-              <span>Save Changes</span>
+              <span>Save All Settings</span>
             )}
           </button>
         </div>
@@ -486,10 +767,11 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
 
       {/* New Event Modal */}
       {showNewEventModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="apple-card max-w-md w-full space-y-4 rounded-2xl p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="bleed-cross bg-[#09090b] max-w-md w-full space-y-4 p-6 shadow-2xl">
+
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-semibold text-white">Create New Event</h3>
+              <h3 className="text-sm font-bold text-[#DFDFDE] uppercase tracking-wide">Create New Event</h3>
               <button
                 type="button"
                 onClick={() => setShowNewEventModal(false)}
@@ -501,45 +783,72 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
 
             <form onSubmit={handleCreateNewEvent} className="space-y-3.5">
               <div>
-                <label className="mb-1 block text-xs text-zinc-300">Event Name</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-300 uppercase tracking-wider">Event Name</label>
                 <input
                   type="text"
                   required
                   value={newEvName}
-                  onChange={(e) => setNewEvName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewEvName(val);
+                    if (!newEvSlug) {
+                      const autoSlug = val
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/(^-|-$)/g, '');
+                      setNewEvSlug(autoSlug);
+                    }
+                  }}
                   placeholder="e.g. NASA Space Apps 2026"
-                  className="apple-input w-full rounded-xl px-3 py-2 text-xs"
+                  className="apple-input w-full px-3 py-2 text-xs"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-xs text-zinc-300">URL Slug</label>
-                <input
-                  type="text"
-                  required
-                  value={newEvSlug}
-                  onChange={(e) =>
-                    setNewEvSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))
-                  }
-                  placeholder="space-apps"
-                  className="apple-input w-full rounded-xl px-3 py-2 font-mono text-xs"
-                />
+                <label className="mb-1 block text-xs font-medium text-zinc-300 uppercase tracking-wider">URL Slug</label>
+                <div className="flex overflow-hidden border border-zinc-800 focus-within:border-zinc-500 focus-within:ring-1 focus-within:ring-zinc-500 bg-zinc-950/60">
+                  <span className="flex items-center bg-zinc-900/90 px-3 py-2 font-mono text-xs text-zinc-500 border-r border-zinc-800 select-none">
+                    {getAppBaseDomain()}/
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={newEvSlug}
+                    onChange={(e) => setNewEvSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                    placeholder="space-apps"
+                    className="w-full bg-transparent px-3 py-2 font-mono text-xs text-zinc-100 outline-none placeholder:text-zinc-600"
+                  />
+                </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs text-zinc-300">Certificate Code</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const prefix = (newEvSlug || 'EVENT').toUpperCase().slice(0, 4);
-                      const rnd = Math.random().toString(36).substring(2, 7).toUpperCase();
-                      setNewEvCode(`${prefix}26-${rnd}`);
-                    }}
-                    className="text-[10px] text-zinc-400 hover:text-white underline"
-                  >
-                    Auto-Generate
-                  </button>
+                  <label className="block text-xs font-medium text-zinc-300 uppercase tracking-wider">Certificate Code</label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prefix = (newEvSlug || 'EVNT')
+                          .replace(/[^a-zA-Z0-9]/g, '')
+                          .toUpperCase()
+                          .slice(0, 4);
+                        const rnd = Math.random().toString(36).substring(2, 6).toUpperCase();
+                        setNewEvCode(`${prefix}26-${rnd}`);
+                      }}
+                      className="text-[10px] text-[#3B82F6] hover:text-white uppercase tracking-wider font-semibold underline"
+                    >
+                      Auto-Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewEvCode(Math.floor(100000 + Math.random() * 900000).toString());
+                      }}
+                      className="text-[10px] text-[#3B82F6] hover:text-white uppercase tracking-wider font-semibold underline"
+                    >
+                      PIN
+                    </button>
+                  </div>
                 </div>
                 <input
                   type="text"
@@ -547,18 +856,18 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
                   value={newEvCode}
                   onChange={(e) => setNewEvCode(e.target.value.toUpperCase())}
                   placeholder="e.g. APPS26-X8K"
-                  className="apple-input w-full rounded-xl px-3 py-2 font-mono text-xs uppercase"
+                  className="apple-input w-full px-3 py-2 font-mono text-xs uppercase"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-xs text-zinc-300">Description (Optional)</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-300 uppercase tracking-wider">Description (Optional)</label>
                 <input
                   type="text"
                   value={newEvDesc}
                   onChange={(e) => setNewEvDesc(e.target.value)}
                   placeholder="Participation verification portal"
-                  className="apple-input w-full rounded-xl px-3 py-2 text-xs"
+                  className="apple-input w-full px-3 py-2 text-xs"
                 />
               </div>
 
@@ -566,14 +875,14 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
                 <button
                   type="button"
                   onClick={() => setShowNewEventModal(false)}
-                  className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-300 hover:text-white"
+                  className="btn-secondary-sharp px-3 py-2 text-xs uppercase tracking-wider"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingEvent}
-                  className="rounded-xl bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-zinc-200"
+                  className="btn-primary-sharp px-4 py-2 text-xs font-semibold uppercase tracking-wider"
                 >
                   {creatingEvent ? 'Creating...' : 'Create Event'}
                 </button>
@@ -585,3 +894,5 @@ export const EventSettings: React.FC<EventSettingsProps> = ({ event, onEventUpda
     </div>
   );
 };
+
+

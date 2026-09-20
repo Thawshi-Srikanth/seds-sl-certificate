@@ -32,11 +32,14 @@ export const EventPicker: React.FC = () => {
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12 sm:py-16">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+        <div className="text-[11px] font-semibold uppercase tracking-widest text-[#3B82F6] mb-1">
+          SEDS Sri Lanka
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-[#DFDFDE] sm:text-3xl uppercase">
           Certificate Portal
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          Select your event to verify and download your certificate of participation.
+        <p className="mt-2 text-xs text-zinc-400">
+          Select your event to verify and download your official certificate of participation.
         </p>
       </div>
 
@@ -50,19 +53,20 @@ export const EventPicker: React.FC = () => {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search event name or code..."
-          className="apple-input w-full rounded-xl py-3 pl-10 pr-4 text-sm placeholder-zinc-500"
+          className="apple-input w-full py-3 pl-10 pr-4 text-sm placeholder-zinc-500"
         />
       </div>
 
       {/* Events List */}
-      <div className="space-y-2.5">
+      <div className="bleed-cross bg-[#09090b] p-3 space-y-2">
+
         {loading ? (
           <div className="py-12 text-center text-zinc-500">
-            <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-zinc-400" />
-            <span className="text-xs">Loading events...</span>
+            <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-[#3B82F6]" />
+            <span className="text-xs uppercase tracking-wider">Loading events...</span>
           </div>
         ) : filteredEvents.length === 0 ? (
-          <div className="apple-card rounded-2xl p-8 text-center text-sm text-zinc-400">
+          <div className="p-8 text-center text-xs text-zinc-400">
             No events found matching &ldquo;{search}&rdquo;.
           </div>
         ) : (
@@ -70,18 +74,18 @@ export const EventPicker: React.FC = () => {
             <Link
               key={event.id}
               to={`/${event.slug}`}
-              className="apple-card group flex items-center justify-between rounded-xl p-4 transition-all hover:border-zinc-700 hover:bg-zinc-800/50"
+              className="group flex items-center justify-between border border-zinc-850 bg-zinc-950/70 p-4 transition-all hover:border-[#3B82F6]/50 hover:bg-zinc-900/60"
             >
               <div>
-                <div className="text-sm font-medium text-white group-hover:text-zinc-100">
+                <div className="text-sm font-semibold text-[#DFDFDE] group-hover:text-white uppercase tracking-wide">
                   {event.name}
                 </div>
                 {event.description && (
                   <div className="mt-0.5 text-xs text-zinc-400">{event.description}</div>
                 )}
-                <div className="mt-1 font-mono text-[11px] text-zinc-500">/{event.slug}</div>
+                <div className="mt-1 font-mono text-[11px] text-[#3B82F6]">/{event.slug}</div>
               </div>
-              <ChevronRight className="ml-4 h-4 w-4 shrink-0 text-zinc-500 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-300" />
+              <ChevronRight className="ml-4 h-4 w-4 shrink-0 text-zinc-500 transition-transform group-hover:translate-x-1 group-hover:text-[#3B82F6]" />
             </Link>
           ))
         )}

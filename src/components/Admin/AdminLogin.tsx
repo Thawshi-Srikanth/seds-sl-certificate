@@ -58,14 +58,20 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="mx-auto w-full max-w-sm px-4 py-16">
-      <div className="apple-card space-y-6 rounded-2xl p-6 sm:p-8">
-        <div className="space-y-1 text-center">
-          <h1 className="text-xl font-semibold tracking-tight text-white">Admin Sign In</h1>
+      <div className="bleed-cross bg-[#09090b] space-y-6 p-6 sm:p-8">
+
+        <div className="space-y-2 text-center">
+          <img
+            src="/sedsl-l-icon.png"
+            alt="SEDS Sri Lanka"
+            className="mx-auto h-12 w-12 object-contain bg-zinc-900 border border-zinc-800 p-1 shadow-md"
+          />
+          <h1 className="text-xl font-semibold tracking-tight text-[#DFDFDE] uppercase">Admin Sign In</h1>
           <p className="text-xs text-zinc-400">SEDS Certificate Management Portal</p>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-950/20 p-3 text-xs text-rose-300">
+          <div className="flex items-center gap-2 border border-rose-600/30 bg-rose-950/30 p-3 text-xs text-rose-300">
             <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
@@ -80,7 +86,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@seds.lk"
-              className="apple-input w-full rounded-xl px-3.5 py-2.5 text-sm placeholder-zinc-600"
+              className="apple-input w-full px-3.5 py-2.5 text-sm placeholder-zinc-600"
             />
           </div>
 
@@ -92,7 +98,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="apple-input w-full rounded-xl px-3.5 py-2.5 text-sm placeholder-zinc-600"
+              className="apple-input w-full px-3.5 py-2.5 text-sm placeholder-zinc-600"
             />
           </div>
 
@@ -100,11 +106,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all hover:bg-zinc-200 active:scale-[0.99] disabled:opacity-50"
+              className="btn-primary-sharp inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold tracking-wider transition-all disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin text-black" />
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
                   <span>Signing in...</span>
                 </>
               ) : (
@@ -115,7 +121,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
         </form>
 
         {!isSupabaseConfigured && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-center text-[11px] text-zinc-400">
+          <div className="border border-zinc-800 bg-zinc-900/50 p-3 text-center text-[11px] text-zinc-400">
             Demo Mode: Enter any email & password (min 4 chars) to access.
           </div>
         )}

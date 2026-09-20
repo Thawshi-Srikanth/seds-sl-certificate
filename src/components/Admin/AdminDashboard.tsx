@@ -91,7 +91,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       {/* Top Header */}
       <div className="flex flex-col items-start justify-between gap-4 border-b border-zinc-800 pb-5 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">Admin Dashboard</h1>
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-[#3B82F6]">
+            Control Center
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-[#DFDFDE] uppercase">Admin Dashboard</h1>
           <p className="mt-0.5 text-xs text-zinc-400">
             SEDS Sri Lanka Certificate Management Platform
           </p>
@@ -103,7 +106,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             <select
               value={selectedEventId}
               onChange={handleEventChange}
-              className="apple-input rounded-xl bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white"
+              className="apple-input bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white uppercase tracking-wider border border-zinc-800"
             >
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
@@ -118,7 +121,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               type="button"
               onClick={handleResetDemoData}
               title="Reset Demo Data"
-              className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-400 transition-colors hover:text-white"
+              className="btn-secondary-sharp flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-white"
             >
               <RotateCcw className="h-3 w-3" />
               <span>Reset Demo</span>
@@ -128,7 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <button
             type="button"
             onClick={handleSignOut}
-            className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:text-white"
+            className="btn-secondary-sharp flex items-center gap-1.5 px-3 py-1.5 text-xs uppercase tracking-wider"
           >
             <LogOut className="h-3.5 w-3.5" />
             <span>Sign Out</span>
@@ -137,12 +140,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       </div>
 
       {/* Segmented Tab Navigation */}
-      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-zinc-800 pb-2 text-xs">
+      <div className="flex items-center gap-1 border-b border-zinc-800 pb-1 text-xs">
         <button
           type="button"
           onClick={() => setActiveTab('stats')}
-          className={`rounded-xl px-3.5 py-2 font-medium transition-colors ${
-            activeTab === 'stats' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
+          className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
+            activeTab === 'stats'
+              ? 'border-[#3B82F6] bg-zinc-900/80 text-[#3B82F6]'
+              : 'border-transparent text-zinc-400 hover:text-white'
           }`}
         >
           Overview & Stats
@@ -151,21 +156,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         <button
           type="button"
           onClick={() => setActiveTab('participants')}
-          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 font-medium transition-colors ${
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
             activeTab === 'participants'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-white'
+              ? 'border-[#3B82F6] bg-zinc-900/80 text-[#3B82F6]'
+              : 'border-transparent text-zinc-400 hover:text-white'
           }`}
         >
           <span>Participants</span>
-          <span className="font-mono text-[10px] text-zinc-500">{stats.totalParticipants}</span>
+          <span className="font-mono text-[10px] bg-zinc-800 px-1.5 py-0.5 text-zinc-300">{stats.totalParticipants}</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('settings')}
-          className={`rounded-xl px-3.5 py-2 font-medium transition-colors ${
-            activeTab === 'settings' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
+          className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
+            activeTab === 'settings'
+              ? 'border-[#3B82F6] bg-zinc-900/80 text-[#3B82F6]'
+              : 'border-transparent text-zinc-400 hover:text-white'
           }`}
         >
           Event Settings
@@ -174,12 +181,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         <button
           type="button"
           onClick={() => setActiveTab('audit')}
-          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 font-medium transition-colors ${
-            activeTab === 'audit' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
+            activeTab === 'audit'
+              ? 'border-[#3B82F6] bg-zinc-900/80 text-[#3B82F6]'
+              : 'border-transparent text-zinc-400 hover:text-white'
           }`}
         >
           <span>Audit Log</span>
-          <span className="font-mono text-[10px] text-zinc-500">{stats.claimedCertificates}</span>
+          <span className="font-mono text-[10px] bg-zinc-800 px-1.5 py-0.5 text-zinc-300">{stats.claimedCertificates}</span>
         </button>
       </div>
 
