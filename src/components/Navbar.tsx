@@ -9,13 +9,12 @@ export const Navbar: React.FC = () => {
     <header className="relative z-20 border-b border-zinc-800 bg-[#09090b]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
         {/* Brand */}
-        <Link to="/" className="flex items-center gap-3 transition-opacity hover:opacity-90">
+        <Link to="/" className="flex items-center transition-opacity hover:opacity-90">
           <img
             src="/sedsl-l-icon.png"
             alt="SEDS Sri Lanka"
             className="h-8 w-auto object-contain"
           />
-          <span className="text-sm font-bold tracking-wider text-[#DFDFDE] uppercase">SEDS Sri Lanka</span>
         </Link>
 
         {/* Action */}

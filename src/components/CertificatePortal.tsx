@@ -350,9 +350,8 @@ export const CertificatePortal: React.FC = () => {
         )}
       </div>
 
-      {/* Subtle test hints */}
+      {/* System info */}
       <div className="mt-6 text-center text-xs text-zinc-500 font-mono">
-        SEDS Sri Lanka Certificate Distribution System
         SEDS Sri Lanka Certificate Distribution System
       </div>
     </div>
