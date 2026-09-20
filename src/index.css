@@ -11,9 +11,14 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Remove default border radius everywhere */
+  /* Remove default border radius and white outlines everywhere */
   *, ::before, ::after {
     border-radius: 0px !important;
+  }
+
+  *:focus, *:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
   }
 }
 

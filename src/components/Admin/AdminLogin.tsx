@@ -64,7 +64,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
           <img
             src="/sedsl-l-icon.png"
             alt="SEDS Sri Lanka"
-            className="mx-auto h-12 w-12 object-contain bg-zinc-900 border border-zinc-800 p-1 shadow-md"
+            className="mx-auto h-12 w-auto object-contain"
           />
           <h1 className="text-xl font-semibold tracking-tight text-[#DFDFDE] uppercase">Admin Sign In</h1>
           <p className="text-xs text-zinc-400">SEDS Certificate Management Portal</p>

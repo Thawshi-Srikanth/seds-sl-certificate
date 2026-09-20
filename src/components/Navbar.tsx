@@ -13,30 +13,39 @@ export const Navbar: React.FC = () => {
           <img
             src="/sedsl-l-icon.png"
             alt="SEDS Sri Lanka"
-            className="h-8 w-8 object-contain bg-zinc-900 border border-zinc-700 p-0.5"
+            className="h-8 w-auto object-contain"
           />
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-bold tracking-wider text-[#DFDFDE] uppercase">SEDS Sri Lanka</span>
-            <span className="text-xs font-mono text-[#3B82F6]">/ VERIFY</span>
-          </div>
+          <span className="text-sm font-bold tracking-wider text-[#DFDFDE] uppercase">SEDS Sri Lanka</span>
         </Link>
 
         {/* Action */}
         <div className="flex items-center gap-3">
           {isAdmin ? (
-            <Link
-              to="/"
-              className="btn-secondary-sharp px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors"
-            >
-              Public Portal
-            </Link>
+            <div className="relative inline-block">
+              <div className="absolute -left-2 -right-2 top-0 border-t border-zinc-800 pointer-events-none z-10" />
+              <div className="absolute -left-2 -right-2 bottom-0 border-b border-zinc-800 pointer-events-none z-10" />
+              <div className="absolute -top-2 -bottom-2 left-0 border-l border-zinc-800 pointer-events-none z-10" />
+              <div className="absolute -top-2 -bottom-2 right-0 border-r border-zinc-800 pointer-events-none z-10" />
+              <Link
+                to="/"
+                className="btn-secondary-sharp inline-flex items-center justify-center px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#DFDFDE] hover:text-white"
+              >
+                Public Portal
+              </Link>
+            </div>
           ) : (
-            <a
-              href="mailto:info@sedsl.org"
-              className="btn-secondary-sharp px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors hover:text-white flex items-center gap-1.5"
-            >
-              Support
-            </a>
+            <div className="relative inline-block">
+              <div className="absolute -left-2 -right-2 top-0 border-t border-zinc-800 pointer-events-none z-10" />
+              <div className="absolute -left-2 -right-2 bottom-0 border-b border-zinc-800 pointer-events-none z-10" />
+              <div className="absolute -top-2 -bottom-2 left-0 border-l border-zinc-800 pointer-events-none z-10" />
+              <div className="absolute -top-2 -bottom-2 right-0 border-r border-zinc-800 pointer-events-none z-10" />
+              <a
+                href="mailto:info@sedsl.org"
+                className="btn-secondary-sharp inline-flex items-center justify-center px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#DFDFDE] hover:text-white"
+              >
+                Support
+              </a>
+            </div>
           )}
         </div>
       </div>
