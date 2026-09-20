@@ -53,7 +53,7 @@ export interface CsvParticipantRow {
   name: string;
   email: string;
   registration_id?: string;
-  eligible: boolean | string;
+  eligible?: boolean | string;
   certificate_path?: string;
 }
 

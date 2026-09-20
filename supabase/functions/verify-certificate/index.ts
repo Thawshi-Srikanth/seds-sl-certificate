@@ -122,34 +122,26 @@ serve(async (req: Request) => {
 
     // 4. Verification Succeeded! Generate short-lived signed URL (300 seconds / 5 min)
     let signedUrl = "";
-    const certificatePath = verificationResult.certificate_path;
+    const certificatePath =
+      verificationResult.certificate_path ||
+      `events/${event_slug}/${normalizedEmail}.pdf`;
 
-    if (certificatePath) {
-      const { data: signedData, error: signError } = await supabaseAdmin.storage
-        .from("certificates")
-        .createSignedUrl(certificatePath, 300); // 5 minutes expiry
+    const { data: signedData, error: signError } = await supabaseAdmin.storage
+      .from("certificates")
+      .createSignedUrl(certificatePath, 300); // 5 minutes expiry
 
-      if (signError) {
-        console.error("Failed to generate signed URL:", signError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            message: "Certificate verified, but certificate file was not found in storage. Please contact event organizers.",
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      signedUrl = signedData?.signedUrl || "";
-    } else {
+    if (signError) {
+      console.error("Failed to generate signed URL:", signError);
       return new Response(
         JSON.stringify({
           success: false,
-          message: "Certificate verified, but no certificate file path is associated with your registration. Please contact event organizers.",
+          message: "Certificate verified, but certificate file was not found in storage. Please contact event organizers.",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    signedUrl = signedData?.signedUrl || "";
 
     // 5. Return success payload
     return new Response(

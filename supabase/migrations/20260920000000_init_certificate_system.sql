@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
+    description TEXT,
     certificate_code_hash TEXT NOT NULL,
     certificate_enabled BOOLEAN NOT NULL DEFAULT true,
     code_expires_at TIMESTAMPTZ,
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.participants (
     name TEXT NOT NULL,
     email TEXT NOT NULL,
     registration_id TEXT,
-    eligible BOOLEAN NOT NULL DEFAULT false,
+    eligible BOOLEAN NOT NULL DEFAULT true,
     certificate_path TEXT,
     certificate_claimed BOOLEAN NOT NULL DEFAULT false,
     claimed_at TIMESTAMPTZ,
@@ -98,14 +99,14 @@ ALTER TABLE public.certificate_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.verification_rate_limits ENABLE ROW LEVEL SECURITY;
 
 -- 6.1 Events Policies
--- Public (anon) users can read public event info, but we use a view/function or column security
--- to hide the certificate_code_hash from raw SELECT queries.
+DROP POLICY IF EXISTS "Public can view active events basic info" ON public.events;
 CREATE POLICY "Public can view active events basic info"
     ON public.events
     FOR SELECT
     TO anon, authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Admins full access on events" ON public.events;
 CREATE POLICY "Admins full access on events"
     ON public.events
     FOR ALL
@@ -114,7 +115,7 @@ CREATE POLICY "Admins full access on events"
     WITH CHECK (true);
 
 -- 6.2 Participants Policies
--- Public users CANNOT read participants table directly (prevents email harvesting)
+DROP POLICY IF EXISTS "Admins full access on participants" ON public.participants;
 CREATE POLICY "Admins full access on participants"
     ON public.participants
     FOR ALL
@@ -123,7 +124,7 @@ CREATE POLICY "Admins full access on participants"
     WITH CHECK (true);
 
 -- 6.3 Certificate Claims Policies
--- Public users CANNOT view claim logs directly
+DROP POLICY IF EXISTS "Admins full access on certificate_claims" ON public.certificate_claims;
 CREATE POLICY "Admins full access on certificate_claims"
     ON public.certificate_claims
     FOR ALL
@@ -132,8 +133,7 @@ CREATE POLICY "Admins full access on certificate_claims"
     WITH CHECK (true);
 
 -- 6.4 Storage Object Policies
--- Only authenticated admins can upload/delete/list files in the private bucket directly.
--- Public users MUST use temporary signed URLs.
+DROP POLICY IF EXISTS "Admin full access to certificates bucket" ON storage.objects;
 CREATE POLICY "Admin full access to certificates bucket"
     ON storage.objects
     FOR ALL
@@ -144,10 +144,6 @@ CREATE POLICY "Admin full access to certificates bucket"
 -- ------------------------------------------------------------------------------
 -- 7. Secure Verification PostgreSQL Function (RPC)
 -- ------------------------------------------------------------------------------
--- This function runs with SECURITY DEFINER so that the public anon key can verify
--- without having direct SELECT permissions on participants table.
--- Returns JSON with success status, participant details, and certificate path.
-
 CREATE OR REPLACE FUNCTION public.verify_certificate_claim(
     p_event_slug TEXT,
     p_email TEXT,
@@ -166,6 +162,7 @@ DECLARE
     v_normalized_email TEXT;
     v_calculated_hash TEXT;
     v_rate_record RECORD;
+    v_cert_path TEXT;
     v_now TIMESTAMPTZ := now();
 BEGIN
     -- 1. Rate Limiting Check (Max 15 verification attempts per 5 minutes per IP hash)
@@ -205,7 +202,7 @@ BEGIN
     -- Calculate SHA-256 hash of submitted code (uppercase/trimmed for consistent entry)
     v_calculated_hash := encode(digest(TRIM(p_submitted_code), 'sha256'), 'hex');
 
-    -- 3. Find event
+    -- 3. Find event by slug
     SELECT * INTO v_event 
     FROM public.events 
     WHERE slug = p_event_slug;
@@ -282,14 +279,20 @@ BEGIN
         claimed_at = COALESCE(claimed_at, v_now)
     WHERE id = v_participant.id;
 
-    -- 7. Return success payload with certificate path and participant details
+    -- 7. Auto-resolve certificate path if null
+    v_cert_path := COALESCE(
+        v_participant.certificate_path,
+        'events/' || v_event.slug || '/' || v_normalized_email || '.pdf'
+    );
+
+    -- 8. Return success payload
     RETURN jsonb_build_object(
         'success', true,
         'participant_id', v_participant.id,
         'participant_name', v_participant.name,
         'registration_id', v_participant.registration_id,
         'event_name', v_event.name,
-        'certificate_path', v_participant.certificate_path,
+        'certificate_path', v_cert_path,
         'already_claimed', v_participant.certificate_claimed,
         'claimed_at', v_now
     );
@@ -300,13 +303,16 @@ $$;
 GRANT EXECUTE ON FUNCTION public.verify_certificate_claim(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
 
 -- ------------------------------------------------------------------------------
--- 8. Seed Default Event (International Observe the Moon Night 2026)
+-- 8. Seed Events & Participants (Multi-Event Platform)
 -- ------------------------------------------------------------------------------
+
+-- Event 1: Observe the Moon Night 2026 (Slug: imot)
 -- Code: IOTM26-X7K9Q -> SHA256: 4beea058c42a5d2eb7b8c8d8b94ce50aa4d59f72db725c89ee4a4c64feeb0580
 INSERT INTO public.events (
     id,
     name,
     slug,
+    description,
     certificate_code_hash,
     certificate_enabled,
     code_expires_at,
@@ -314,19 +320,47 @@ INSERT INTO public.events (
 ) VALUES (
     'e0000000-0000-0000-0000-000000000001',
     'International Observe the Moon Night 2026',
-    'observe-the-moon-2026',
-    -- SHA-256 hash of 'IOTM26-X7K9Q'
-    encode(digest('IOTM26-X7K9Q', 'sha256'), 'hex'),
+    'imot',
+    'Official certificate distribution for attendees of the live broadcast.',
+    '4beea058c42a5d2eb7b8c8d8b94ce50aa4d59f72db725c89ee4a4c64feeb0580',
     true,
     now() + INTERVAL '90 days',
     now()
 )
 ON CONFLICT (slug) DO UPDATE SET
     name = EXCLUDED.name,
+    description = EXCLUDED.description,
     certificate_code_hash = EXCLUDED.certificate_code_hash,
     certificate_enabled = EXCLUDED.certificate_enabled;
 
--- Seed Sample Participants
+-- Event 2: Space Summit 2026 (Slug: space-summit)
+-- Code: SEDS26-SPACE -> SHA256: 5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8
+INSERT INTO public.events (
+    id,
+    name,
+    slug,
+    description,
+    certificate_code_hash,
+    certificate_enabled,
+    code_expires_at,
+    created_at
+) VALUES (
+    'e0000000-0000-0000-0000-000000000002',
+    'SEDS Sri Lanka Space Exploration Summit 2026',
+    'space-summit',
+    'Participation verification for the annual national space symposium.',
+    '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+    true,
+    now() + INTERVAL '60 days',
+    now()
+)
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    certificate_code_hash = EXCLUDED.certificate_code_hash,
+    certificate_enabled = EXCLUDED.certificate_enabled;
+
+-- Seed Sample Participants (Using new events/{slug}/{email}.pdf pattern)
 INSERT INTO public.participants (
     event_id,
     name,
@@ -342,7 +376,7 @@ INSERT INTO public.participants (
     'john@example.com',
     'SEDS-001',
     true,
-    'events/e0000000-0000-0000-0000-000000000001/john-silva.pdf',
+    'events/imot/john@example.com.pdf',
     false
 ),
 (
@@ -351,7 +385,7 @@ INSERT INTO public.participants (
     'sarah@example.com',
     'SEDS-002',
     false,
-    NULL,
+    'events/imot/sarah@example.com.pdf',
     false
 ),
 (
@@ -360,7 +394,20 @@ INSERT INTO public.participants (
     'kasun@example.com',
     'SEDS-003',
     true,
-    'events/e0000000-0000-0000-0000-000000000001/kasun-fernando.pdf',
+    'events/imot/kasun@example.com.pdf',
+    false
+),
+(
+    'e0000000-0000-0000-0000-000000000002',
+    'John Silva',
+    'john@example.com',
+    'SUMMIT-101',
+    true,
+    'events/space-summit/john@example.com.pdf',
     false
 )
-ON CONFLICT (event_id, email) DO NOTHING;
+ON CONFLICT (event_id, email) DO UPDATE SET
+    name = EXCLUDED.name,
+    registration_id = EXCLUDED.registration_id,
+    eligible = EXCLUDED.eligible,
+    certificate_path = EXCLUDED.certificate_path;

@@ -352,10 +352,11 @@ async function verifyViaRpc(
   }
 
   let downloadUrl = '';
-  if (data.certificate_path) {
+  const certPath = data.certificate_path || `events/${eventSlug}/${email}.pdf`;
+  if (certPath) {
     const { data: signedData } = await supabase.storage
       .from('certificates')
-      .createSignedUrl(data.certificate_path, 300);
+      .createSignedUrl(certPath, 300);
     downloadUrl = signedData?.signedUrl || '';
   }
 
@@ -573,14 +574,26 @@ export async function addParticipant(
     'id' | 'event_id' | 'certificate_claimed' | 'claimed_at' | 'created_at'
   >
 ): Promise<{ success: boolean; message?: string }> {
+  const normEmail = normalizeEmail(participant.email);
+  const events = getStoredMockEvents();
+  const event = events.find((e) => e.id === eventId);
+  const eventSlug = event?.slug || 'event';
+
+  const autoRegId =
+    participant.registration_id?.trim() ||
+    `SEDS-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+
+  const autoCertPath =
+    participant.certificate_path?.trim() || `events/${eventSlug}/${normEmail}.pdf`;
+
   const newRecord: Participant = {
     id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     event_id: eventId,
     name: participant.name.trim(),
-    email: normalizeEmail(participant.email),
-    registration_id: participant.registration_id?.trim() || null,
-    eligible: Boolean(participant.eligible),
-    certificate_path: participant.certificate_path?.trim() || null,
+    email: normEmail,
+    registration_id: autoRegId,
+    eligible: participant.eligible !== undefined ? Boolean(participant.eligible) : true,
+    certificate_path: autoCertPath,
     certificate_claimed: false,
     claimed_at: null,
     created_at: new Date().toISOString(),
@@ -627,25 +640,51 @@ export async function importParticipantsCSV(
   let updated = 0;
   let failed = 0;
 
+  // Retrieve event slug for auto-generating certificate paths
+  let eventSlug = 'event';
+  if (supabase && isSupabaseConfigured) {
+    const { data: evData } = await supabase
+      .from('events')
+      .select('slug')
+      .eq('id', eventId)
+      .maybeSingle();
+    if (evData?.slug) {
+      eventSlug = evData.slug;
+    }
+  } else {
+    const events = getStoredMockEvents();
+    const ev = events.find((e) => e.id === eventId);
+    if (ev?.slug) eventSlug = ev.slug;
+  }
+
   if (supabase && isSupabaseConfigured) {
     for (const row of rows) {
       if (!row.email || !row.name) {
         failed++;
         continue;
       }
+      const normEmail = normalizeEmail(row.email);
       const eligibleBool =
-        typeof row.eligible === 'boolean'
-          ? row.eligible
-          : String(row.eligible).toLowerCase() === 'true' || String(row.eligible) === '1';
+        row.eligible !== undefined
+          ? typeof row.eligible === 'boolean'
+            ? row.eligible
+            : String(row.eligible).toLowerCase() === 'true' || String(row.eligible) === '1'
+          : true;
+
+      const regId =
+        row.registration_id?.trim() ||
+        `SEDS-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+
+      const certPath = row.certificate_path?.trim() || `events/${eventSlug}/${normEmail}.pdf`;
 
       const { error } = await supabase.from('participants').upsert(
         {
           event_id: eventId,
           name: row.name.trim(),
-          email: normalizeEmail(row.email),
-          registration_id: row.registration_id?.trim() || null,
+          email: normEmail,
+          registration_id: regId,
           eligible: eligibleBool,
-          certificate_path: row.certificate_path?.trim() || null,
+          certificate_path: certPath,
         },
         { onConflict: 'event_id,email' }
       );
@@ -669,13 +708,17 @@ export async function importParticipantsCSV(
 
     const normEmail = normalizeEmail(row.email);
     const eligibleBool =
-      typeof row.eligible === 'boolean'
-        ? row.eligible
-        : String(row.eligible).toLowerCase() === 'true' || String(row.eligible) === '1';
+      row.eligible !== undefined
+        ? typeof row.eligible === 'boolean'
+          ? row.eligible
+          : String(row.eligible).toLowerCase() === 'true' || String(row.eligible) === '1'
+        : true;
 
     const existingIndex = participants.findIndex(
       (p) => p.event_id === eventId && normalizeEmail(p.email) === normEmail
     );
+
+    const certPath = row.certificate_path?.trim() || `events/${eventSlug}/${normEmail}.pdf`;
 
     if (existingIndex >= 0) {
       participants[existingIndex] = {
@@ -683,19 +726,22 @@ export async function importParticipantsCSV(
         name: row.name.trim(),
         registration_id: row.registration_id?.trim() || participants[existingIndex].registration_id,
         eligible: eligibleBool,
-        certificate_path:
-          row.certificate_path?.trim() || participants[existingIndex].certificate_path,
+        certificate_path: certPath,
       };
       updated++;
     } else {
+      const regId =
+        row.registration_id?.trim() ||
+        `SEDS-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+
       participants.push({
         id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         event_id: eventId,
         name: row.name.trim(),
         email: normEmail,
-        registration_id: row.registration_id?.trim() || null,
+        registration_id: regId,
         eligible: eligibleBool,
-        certificate_path: row.certificate_path?.trim() || null,
+        certificate_path: certPath,
         certificate_claimed: false,
         claimed_at: null,
         created_at: new Date().toISOString(),
