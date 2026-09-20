@@ -1,0 +1,7 @@
+name,email,registration_id,eligible,certificate_path
+John Silva,john@example.com,SEDS-001,true,events/observe-the-moon-2026/john-silva.pdf
+Sarah Perera,sarah@example.com,SEDS-002,false,
+Kasun Fernando,kasun@example.com,SEDS-003,true,events/observe-the-moon-2026/kasun-fernando.pdf
+Dinithi Jayawardena,dinithi@example.com,SEDS-004,true,events/observe-the-moon-2026/dinithi-jayawardena.pdf
+Nuwan Pradeep,nuwan@example.com,SEDS-005,true,events/observe-the-moon-2026/nuwan-pradeep.pdf
+Amali Wickramasinghe,amali@example.com,SEDS-006,true,events/observe-the-moon-2026/amali-wickramasinghe.pdf
